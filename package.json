@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@sveltejs/mcp": "^0.1.8"
+  }
+}

@@ -1,0 +1,65 @@
+# Environments
+.venv/
+env/
+venv/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec
+
+# Type checker caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.nox/
+dmypy.json
+.dmypy.json
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# Logs and local state
+*.log
+.DS_Store
+Thumbs.db
+
+# Dependency downloads
+pip-wheel-metadata/
+pip-log.txt
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+.vercel/
+pnpm-lock.yaml
+yarn.lock
+
+# Frontend build output
+.vite/
+frontend/.vite/
+frontend/build/
+
+# Playwright artifacts
+playwright-report/
+test-results/
+
+# Environment files & secrets
+.env
+.env.*
+
+# Editor folders
+.vscode/
+.idea/
+
+# Temporary workspace files
+tmp/
+*.swp
+*.swo
