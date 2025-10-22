@@ -200,7 +200,7 @@
       </dl>
     </article>
 
-    <article class="stat-card stat-card--wide" role="listitem">
+    <article class="stat-card" role="listitem">
       <header>
         <div>
           <h3>Amenities audit</h3>
@@ -412,21 +412,23 @@
 
   .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1rem;
+    gap: 1.2rem;
+  }
+
+  @media (min-width: 640px) {
+    .stat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
   }
 
   .stat-card {
     background: rgba(15, 23, 42, 0.78);
     border: 1px solid rgba(148, 163, 184, 0.35);
     border-radius: 18px;
-    padding: 1.4rem 1.5rem;
+    padding: 1.3rem 1.4rem;
     display: grid;
-    gap: 1rem;
-  }
-
-  .stat-card--wide {
-    grid-column: 1 / -1;
+    gap: 0.9rem;
   }
 
   .stat-card header {
@@ -468,7 +470,7 @@
 
   dl {
     display: grid;
-    gap: 0.8rem;
+    gap: 0.7rem;
     margin: 0;
   }
 

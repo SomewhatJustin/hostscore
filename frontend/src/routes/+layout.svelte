@@ -33,6 +33,23 @@
 </div>
 
 <style>
+  :global(html),
+  :global(body) {
+    font-family: 'Zalando Sans', system-ui, sans-serif;
+    font-feature-settings: 'kern';
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+  }
+
+  :global(h1),
+  :global(h2),
+  :global(h3),
+  :global(h4),
+  :global(h5),
+  :global(h6) {
+    font-family: 'Zalando Sans Expanded', 'Zalando Sans', system-ui, sans-serif;
+  }
+
   .app-shell {
     min-height: 100vh;
     display: grid;

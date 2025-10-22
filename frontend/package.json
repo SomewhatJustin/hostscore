@@ -7,18 +7,22 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check"
+    "check": "svelte-kit sync && svelte-check",
+    "prepare": "svelte-kit sync"
   },
   "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "@sveltejs/adapter-auto": "^3.3.1",
     "@sveltejs/kit": "^2.47.2",
     "@types/node": "^22.10.1",
-    "@opentelemetry/api": "^1.9.0",
     "rollup": "^4.24.0",
     "svelte": "^5.1.6",
     "svelte-check": "^4.1.0",
     "tslib": "^2.8.1",
     "typescript": "^5.6.3",
     "vite": "^6.3.1"
+  },
+  "dependencies": {
+    "@sveltejs/mcp": "^0.1.8"
   }
 }

@@ -15,11 +15,12 @@
   const initialUrl = $derived(data?.prefillUrl ?? '');
 
   const loadingMessages = [
-    'Checking your towels',
+    'Inspecting your towels',
     'Seeing if a guest left anything',
     'Definitely NOT throwing a party',
     'Evaluating your listing',
-    'Checking the vibe'
+    'Checking the vibe',
+    'Asking to check-in early'
   ];
 
   let loading = $state(false);
@@ -39,7 +40,7 @@
 
     loadingTimer = setInterval(() => {
       loadingMessageIndex = (loadingMessageIndex + 1) % loadingMessages.length;
-    }, 2000);
+    }, 3000);
   };
 
   const stopLoadingMessages = () => {
