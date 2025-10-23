@@ -435,51 +435,90 @@ def _extract_amenities(
 ) -> List[str]:
     items: List[str] = []
 
+    def normalize_text(raw: Optional[str]) -> Optional[str]:
+        if not raw:
+            return None
+        parts = [part.strip() for part in raw.split("\n") if part.strip()]
+        if not parts:
+            return None
+        primary = " ".join(parts[0].split())
+        if not primary or primary.lower().startswith("unavailable:"):
+            return None
+        return primary
+
     def collect(container: Optional[BeautifulSoup]) -> None:
         if not container:
             return
         section = container.select_one('[data-section-id="AMENITIES_DEFAULT"]')
         if section:
             for node in section.select('[data-testid="amenity-item"]'):
-                text = node.get_text(" ", strip=True)
-                if text and not text.lower().startswith("unavailable:"):
+                text = normalize_text(node.get_text("\n", strip=True))
+                if text:
                     items.append(text)
         for node in container.select('[itemprop="amenityFeature"] span'):
-            text = node.get_text(" ", strip=True)
-            if text and not text.lower().startswith("unavailable:"):
+            text = normalize_text(node.get_text("\n", strip=True))
+            if text:
                 items.append(text)
         for node in container.select('ul[role="list"] li'):
-            text = node.get_text(" ", strip=True)
-            if text and "amenit" not in text.lower():
-                normalized = text.replace("\n", " ").strip()
-                if normalized and not normalized.lower().startswith("unavailable:"):
-                    items.append(normalized)
+            if "amenit" in (node.get_text(" ", strip=True) or "").lower():
+                continue
+            text = normalize_text(node.get_text("\n", strip=True))
+            if text:
+                items.append(text)
         for node in container.select('[data-testid="pdp-section-amenities-item"]'):
-            text = node.get_text(" ", strip=True)
-            if text and not text.lower().startswith("unavailable:"):
+            text = normalize_text(node.get_text("\n", strip=True))
+            if text:
                 items.append(text)
 
     collect(soup)
     collect(amenities_soup)
     if external_items:
         for item in external_items:
-            cleaned = ' '.join(item.split())
-            if cleaned and not cleaned.lower().startswith('unavailable:'):
-                items.append(cleaned)
+            text = normalize_text(item.replace("\r", "\n"))
+            if text:
+                items.append(text)
 
     return list(dict.fromkeys(items))
 
 
 def _extract_house_rules(soup: BeautifulSoup) -> List[str]:
-    section = soup.select_one('[data-section-id="POLICIES_DEFAULT"]')
-    if not section:
-        section = soup.select_one('[data-section-id="HOUSE_RULES_DEFAULT"]')
     rules: List[str] = []
+
+    def add_rule(text: Optional[str]) -> None:
+        cleaned = (text or "").strip()
+        if not cleaned:
+            return
+        lowered = cleaned.lower()
+        if lowered in {"show more", "add dates", "house rules"}:
+            return
+        rules.append(cleaned)
+
+    def drain(container: Optional[BeautifulSoup]) -> None:
+        if not container:
+            return
+        for node in container.select("li, p, span"):
+            if node.find_parent("button"):
+                continue
+            add_rule(node.get_text(" ", strip=True))
+
+    section = soup.select_one('[data-section-id="POLICIES_DEFAULT"]')
     if section:
-        for node in section.select("li, p"):
-            text = node.get_text(" ", strip=True)
-            if text:
-                rules.append(text)
+        heading = section.find(
+            lambda tag: tag.name in {"h2", "h3"}
+            and "house rules" in tag.get_text(" ", strip=True).lower()
+        )
+        if heading:
+            column = heading.parent.parent if heading.parent else None
+            drain(column)
+
+    if not rules:
+        legacy_section = soup.select_one('[data-section-id="HOUSE_RULES_DEFAULT"]')
+        drain(legacy_section)
+
+    modal = soup.select_one('[aria-label="House rules"]')
+    drain(modal)
+
+    # Preserve original order while removing duplicates.
     return list(dict.fromkeys(rules))
 
 

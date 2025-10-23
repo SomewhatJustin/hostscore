@@ -324,7 +324,7 @@ T-0 (2–4h)
 
     Scaffold backend modules + Playwright fetch + basic extraction
 
-    Heuristics: photo count/median srcset, pHash dupes, copy stats, amenity text hits
+    Heuristics: photo count/median srcset, pHash dupes, copy stats, amenity presence via alias/fuzzy/embedding similarity
 
     Wire Haiku 4.5 call + schema validation
 

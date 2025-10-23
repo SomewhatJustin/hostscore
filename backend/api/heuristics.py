@@ -9,6 +9,7 @@ from typing import List, Pattern, Set
 
 from textstat import textstat
 
+from .amenity_matcher import detect_amenity_mentions
 from .extract import ListingContent, PhotoMeta
 from .models import AmenityAudit, CopyStats, PhotoStats, SectionScores, TopFix, TrustSignals
 
@@ -255,33 +256,29 @@ def _score_amenities(content: ListingContent):
     normalized_listed = {_normalize_token(amenity): amenity for amenity in listed}
     listed_lower = [amenity.lower() for amenity in listed]
 
-    text_blob = " ".join(
+    text_corpus = " ".join(
         [
             content.title,
             content.summary,
             content.description,
             content.full_text,
             " ".join(content.house_rules),
+            " ".join(content.reviews),
         ]
-    ).lower()
-    text_blob = re.sub(r"\s+", " ", text_blob)
+    )
 
-    text_hits: List[str] = []
-    listed_no_text: List[str] = []
-    for token, original in normalized_listed.items():
-        if token and _has_positive_reference(text_blob, [re.compile(rf"\b{re.escape(token)}\b", re.IGNORECASE)]):
-            text_hits.append(original)
-        else:
-            listed_no_text.append(original)
+    text_hits, listed_no_text = detect_amenity_mentions(listed, text_corpus)
 
     likely_present_not_listed: List[str] = []
+    lowered_blob = text_corpus.lower()
+    lowered_blob = re.sub(r"\s+", " ", lowered_blob)
     for amenity, patterns in _AMENITY_REGEX.items():
         token = _normalize_token(amenity)
         if token in normalized_listed:
             continue
         if any(pattern.search(name) for pattern in patterns for name in listed_lower):
             continue
-        if _has_positive_reference(text_blob, patterns):
+        if _has_positive_reference(lowered_blob, patterns):
             likely_present_not_listed.append(amenity)
 
     score = 100
