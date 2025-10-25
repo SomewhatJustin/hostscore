@@ -126,16 +126,18 @@
             <span class="metric-note">More variety helps guests visualize the stay before booking.</span>
           </dd>
         </div>
-        <div>
-          <dt>Key spaces covered</dt>
-          <dd>
-            {assessment.photoStats.keySpacesCovered} of {assessment.photoStats.keySpacesTotal}
-            {#if assessment.photoStats.missingCoverage.length}
-              &nbsp;(missing {formatCoverageList(assessment.photoStats.missingCoverage)})
-            {/if}
-            <span class="metric-note">Core rooms like bedrooms and baths should always appear in the gallery.</span>
-          </dd>
-        </div>
+        {#if assessment.photoStats.keySpaceMetricsSupported && assessment.photoStats.keySpacesTotal > 0}
+          <div>
+            <dt>Key spaces covered</dt>
+            <dd>
+              {assessment.photoStats.keySpacesCovered} of {assessment.photoStats.keySpacesTotal}
+              {#if assessment.photoStats.missingCoverage.length}
+                &nbsp;(missing {formatCoverageList(assessment.photoStats.missingCoverage)})
+              {/if}
+              <span class="metric-note">Core rooms like bedrooms and baths should always appear in the gallery.</span>
+            </dd>
+          </div>
+        {/if}
         <div>
           <dt>Coverage highlights</dt>
           <dd>

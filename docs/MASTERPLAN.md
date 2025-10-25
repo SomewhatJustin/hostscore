@@ -271,16 +271,16 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
-uvicorn api.main:app --reload --port 8080
+uvicorn api.main:app --reload --port 8000
 
 # Docker
 docker build -t airbnb-assessor .
 # Run locally with Chromium sandbox disabled if needed:
-docker run -p 8080:8080 --shm-size=1g --cap-add=SYS_ADMIN airbnb-assessor
+docker run -p 8000:8000 --shm-size=1g --cap-add=SYS_ADMIN airbnb-assessor
 
 # Railway
 # 1) Create new service from repo
-# 2) Set PORT=8080, PYTHONUNBUFFERED=1, PLAYWRIGHT_BROWSERS_PATH=0
+# 2) Set PORT=8000, PYTHONUNBUFFERED=1, PLAYWRIGHT_BROWSERS_PATH=0
 # 3) Add LLM keys: HAIKU_API_KEY=...
 # 4) Deploy; note public URL for frontend
 
@@ -292,8 +292,8 @@ COPY backend/requirements.txt .
 RUN pip install -r requirements.txt
 COPY backend/api /app/api
 ENV PYTHONUNBUFFERED=1
-EXPOSE 8080
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+EXPOSE 8000
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 Frontend (SvelteKit)
 

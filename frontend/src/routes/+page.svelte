@@ -117,7 +117,7 @@
 <section class="hero">
   <div class="intro">
     <p class="kicker">HostScore assistant</p>
-    <h1>Assess Airbnb listings for conversion-readiness</h1>
+    <h1>Rate your Airbnb listing</h1>
     <p class="lede">
       Understand how travelers experience your Airbnb listing and get prioritized guidance to improve photos, storytelling, amenities, and trust signals before the next guest books.
     </p>

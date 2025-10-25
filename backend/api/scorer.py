@@ -10,6 +10,7 @@ from httpx import AsyncClient, HTTPStatusError
 from pydantic import BaseModel, ConfigDict
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from .heuristics import sort_top_fixes
 from .models import AssessmentResponse, TopFix
 
 SYSTEM_PROMPT = (
@@ -133,7 +134,7 @@ async def refine_assessment(
         if client is None:
             await http_client.aclose()
 
-    top_fixes: list[TopFix] = heuristics.top_fixes.copy()
+    top_fixes: list[TopFix] = sort_top_fixes(heuristics.top_fixes.copy())
     overall = heuristics.overall
 
     amenities = heuristics.amenities.model_copy()
@@ -159,7 +160,7 @@ async def refine_assessment(
             except Exception:
                 continue
         if parsed_fixes:
-            top_fixes = parsed_fixes[:5]
+            top_fixes = sort_top_fixes(parsed_fixes)[:5]
 
         amenities_payload = llm_payload.get("amenities", {})
         if isinstance(amenities_payload, dict):

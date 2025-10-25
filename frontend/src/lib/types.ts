@@ -15,6 +15,8 @@ export interface PhotoStats {
   keySpacesTotal: number;
   hasExteriorNight: boolean;
   altTextRatio?: number | null;
+  usesLegacyGallery: boolean;
+  keySpaceMetricsSupported: boolean;
 }
 
 export interface TrustSignals {

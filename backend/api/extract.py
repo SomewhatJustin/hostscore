@@ -4,15 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from playwright.async_api import Page, Response
 from trafilatura import extract as trafilatura_extract
 
 from .browser import BrowserManager
 from .utils import DEFAULT_USER_AGENT, extract_im_width, parse_srcset
+
+
+_GENERIC_ALT_PATTERNS = (
+    re.compile(r"\b(?:listing\s+)?image\s*\d+(?:\s+of\s+\d+)?$", re.I),
+    re.compile(r"\bphoto\s*\d+(?:\s+of\s+\d+)?$", re.I),
+)
+_BACKGROUND_URL_PATTERN = re.compile(r"url\((?:'|\")?(.*?)(?:'|\")?\)")
+_LEGACY_GALLERY_LABEL = re.compile(r"\b(?:listing\s+)?image\s*\d+(?:\s+of\s+\d+)?$", re.I)
 
 
 @dataclass
@@ -39,6 +48,7 @@ class ListingContent:
     house_rules: List[str] = field(default_factory=list)
     reviews: List[str] = field(default_factory=list)
     photos: List[PhotoMeta] = field(default_factory=list)
+    uses_legacy_gallery: bool = False
     debug: dict = field(default_factory=dict)
 
 
@@ -258,69 +268,109 @@ async def _capture_photo_modal(page: Page) -> Optional[str]:
 
 async def _capture_amenities_modal(page: Page) -> tuple[Optional[str], List[str]]:
     selectors = [
-        'button:has-text("Show all")',
+        '[data-testid="pdp-show-all-amenities-button"]',
         'button:has-text("Show all amenities")',
-        'button:has-text("Show all 66 amenities")',
+        'button:has-text("Show all")',
         'button:has-text("See all amenities")',
     ]
 
     async def _open(selector: str, depth: int = 0) -> tuple[Optional[str], List[str]]:
         if depth > 4:
             return None, []
-        button = await page.query_selector(selector)
-        if not button:
+        buttons = await page.query_selector_all(selector)
+        if not buttons and selector == selectors[-1]:
+            buttons = await page.query_selector_all("button")
+        scored_buttons = []
+        for candidate in buttons:
+            try:
+                text = (await candidate.inner_text() or "").strip()
+            except Exception:
+                continue
+            lowered = text.lower()
+            score = 0
+            if "amenit" in lowered:
+                score += 3
+            if "show all" in lowered or "see all" in lowered:
+                score += 2
+            if "amenities" in lowered:
+                score += 1
+            if score == 0 and selector != selectors[-1]:
+                continue
+            scored_buttons.append((score, candidate, lowered))
+        scored_buttons.sort(key=lambda item: item[0], reverse=True)
+        if not scored_buttons:
             return None, []
-        await page.evaluate('(el) => el.click()', button)
-        await page.wait_for_timeout(600)
-        dialog = await page.query_selector('div[role="dialog"]')
-        if not dialog:
-            return None, []
-        translation_modal = await dialog.query_selector('[data-testid="translation-announce-modal"]')
-        text_content = (await dialog.inner_text()) or ''
-        if translation_modal or 'translation settings' in text_content.lower() or 'translation on' in text_content.lower():
-            close_btn = await dialog.query_selector('button[aria-label="Close"]')
-            if close_btn:
-                await page.evaluate('(el) => el.click()', close_btn)
+        for _, button, _lowered in scored_buttons:
+            await page.evaluate('(el) => el.scrollIntoView({block: "center"})', button)
+            await page.wait_for_timeout(150)
+            await page.evaluate('(el) => el.click()', button)
+            await page.wait_for_timeout(600)
+            dialog = None
+            dialogs = await page.query_selector_all('div[role="dialog"]')
+            for candidate_dialog in reversed(dialogs):
+                try:
+                    text = (await candidate_dialog.inner_text() or "").lower()
+                except Exception:
+                    continue
+                if "amenit" in text or "what this place offers" in text:
+                    dialog = candidate_dialog
+                    break
+            if not dialog:
                 await page.wait_for_timeout(200)
-            return await _open(selector, depth + 1)
-        await page.evaluate(
-            """() => {
-                const dialog = document.querySelector('div[role="dialog"]');
-                if (!dialog) return;
-                const scrollContainer = dialog.querySelector('[data-testid="amenity-modal"]') || dialog;
-                if (!scrollContainer) return;
-                let traversed = 0;
-                const total = scrollContainer.scrollHeight;
-                while (traversed < total) {
-                    scrollContainer.scrollBy(0, 800);
-                    traversed += 800;
-                }
-            }"""
-        )
-        await page.wait_for_timeout(600)
-        html = await page.evaluate(
-            """() => {
-                const dialog = document.querySelector('div[role="dialog"]');
-                return dialog ? dialog.outerHTML : null;
-            }"""
-        )
-        items = await page.evaluate(
-            """() => {
-                const dialog = document.querySelector('div[role="dialog"]');
-                if (!dialog) return [];
-                const results = [];
-                const nodes = dialog.querySelectorAll('[data-testid="pdp-section-amenities-item"], [data-testid="amenity-item"], ul[role="list"] li');
-                nodes.forEach((node) => {
-                    const text = (node.innerText || '').trim();
-                    if (text) {
-                        results.push(text);
+                continue
+            translation_modal = await dialog.query_selector('[data-testid="translation-announce-modal"]')
+            text_content = (await dialog.inner_text()) or ''
+            lowered_content = text_content.lower()
+            if translation_modal or 'translation settings' in lowered_content or 'translation on' in lowered_content:
+                close_btn = await dialog.query_selector('button[aria-label="Close"]')
+                if close_btn:
+                    await page.evaluate('(el) => el.click()', close_btn)
+                    await page.wait_for_timeout(200)
+                return await _open(selector, depth + 1)
+            if 'amenit' not in lowered_content and 'what this place offers' not in lowered_content:
+                await _close_modal(page)
+                await page.wait_for_timeout(200)
+                continue
+            await page.evaluate(
+                """(dialog) => {
+                    if (!dialog) return;
+                    const scrollContainer = dialog.querySelector('[data-testid="amenity-modal"]') || dialog;
+                    if (!scrollContainer) return;
+                    let traversed = 0;
+                    const total = scrollContainer.scrollHeight;
+                    while (traversed < total) {
+                        scrollContainer.scrollBy(0, 800);
+                        traversed += 800;
                     }
-                });
-                return results;
-            }"""
-        )
-        await _close_modal(page)
-        return html, [item for item in items if item]
+                }""",
+                dialog,
+            )
+            await page.wait_for_timeout(600)
+            html = await page.evaluate(
+                """(dialog) => dialog ? dialog.outerHTML : null""",
+                dialog,
+            )
+            items = await page.evaluate(
+                """(dialog) => {
+                    if (!dialog) return [];
+                    const results = [];
+                    const nodes = dialog.querySelectorAll('[data-testid="pdp-section-amenities-item"], [data-testid="amenity-item"], ul[role="list"] li');
+                    nodes.forEach((node) => {
+                        const text = (node.innerText || '').trim();
+                        if (text) {
+                            results.push(text);
+                        }
+                    });
+                    return results;
+                }""",
+                dialog,
+            )
+            await _close_modal(page)
+            cleaned = [item for item in items if item]
+            if cleaned:
+                return html, cleaned
+            await page.wait_for_timeout(200)
+        return None, []
 
     for selector in selectors:
         html, items = await _open(selector)
@@ -372,6 +422,7 @@ def extract_listing(
     amenities_listed = _extract_amenities(soup, amenities_soup, preloaded_state, amenities_items)
     house_rules = _extract_house_rules(soup)
     reviews = _extract_reviews(soup, limit=2)
+    uses_legacy_gallery = _detect_legacy_gallery(soup, overlay_soup)
     photos = _extract_photos(soup, overlay_soup, preloaded_state)
 
     return ListingContent(
@@ -384,6 +435,7 @@ def extract_listing(
         house_rules=house_rules,
         reviews=reviews,
         photos=photos,
+        uses_legacy_gallery=uses_legacy_gallery,
     )
 
 
@@ -552,6 +604,83 @@ def _extract_photos(
     photos: List[PhotoMeta] = []
     seen_urls = set()
 
+    def _is_generic_alt(text: Optional[str]) -> bool:
+        if not text:
+            return True
+        normalized = " ".join(text.split())
+        if not normalized:
+            return True
+        return any(pattern.search(normalized) for pattern in _GENERIC_ALT_PATTERNS)
+
+    def _aria_reference_text(ref: Optional[str], container: BeautifulSoup) -> Optional[str]:
+        if not ref:
+            return None
+        for ref_id in ref.split():
+            target = container.find(id=ref_id)
+            if isinstance(target, Tag):
+                label = target.get_text(" ", strip=True)
+                if label and not _is_generic_alt(label):
+                    return label
+        return None
+
+    def _infer_photo_label(node: Optional[Tag], container: BeautifulSoup) -> str:
+        if not isinstance(node, Tag):
+            return ""
+
+        direct_alt = (node.get("alt") or "").strip()
+        if direct_alt and not _is_generic_alt(direct_alt):
+            return direct_alt
+
+        aria_label = (node.get("aria-label") or "").strip()
+        if aria_label and not _is_generic_alt(aria_label):
+            return aria_label
+
+        title_attr = (node.get("title") or "").strip()
+        if title_attr and not _is_generic_alt(title_attr):
+            return title_attr
+
+        labelledby_text = _aria_reference_text(node.get("aria-labelledby"), container)
+        if labelledby_text:
+            return labelledby_text
+
+        describedby_text = _aria_reference_text(node.get("aria-describedby"), container)
+        if describedby_text:
+            return describedby_text
+
+        for ancestor in node.parents:
+            if not isinstance(ancestor, Tag):
+                continue
+            ancestor_aria = (ancestor.get("aria-label") or "").strip()
+            if ancestor_aria and not _is_generic_alt(ancestor_aria):
+                return ancestor_aria
+
+            ancestor_labelledby = _aria_reference_text(
+                ancestor.get("aria-labelledby"), container
+            )
+            if ancestor_labelledby:
+                return ancestor_labelledby
+
+            ancestor_describedby = _aria_reference_text(
+                ancestor.get("aria-describedby"), container
+            )
+            if ancestor_describedby:
+                return ancestor_describedby
+
+            if ancestor.name == "button":
+                button_title = (ancestor.get("title") or "").strip()
+                if button_title and not _is_generic_alt(button_title):
+                    return button_title
+                button_text = ancestor.get_text(" ", strip=True)
+                if button_text and not _is_generic_alt(button_text):
+                    return button_text
+
+            if ancestor.get("role") == "img":
+                role_label = (ancestor.get("aria-label") or "").strip()
+                if role_label and not _is_generic_alt(role_label):
+                    return role_label
+
+        return direct_alt if direct_alt and not _is_generic_alt(direct_alt) else ""
+
     def collect(container: BeautifulSoup) -> None:
         for picture in container.find_all("picture"):
             sources = picture.find_all("source")
@@ -566,7 +695,7 @@ def _extract_photos(
                 if not candidates and src:
                     width = extract_im_width(src)
                     candidates.append((src, width))
-                alt = img.get("alt") or ""
+                alt = _infer_photo_label(img, container)
             else:
                 alt = ""
             if not candidates and img:
@@ -589,6 +718,8 @@ def _extract_photos(
             )
 
         for img in container.find_all("img"):
+            if img.find_parent("picture"):
+                continue
             src = img.get("src", "")
             srcset = img.get("srcset", "")
             candidates = parse_srcset(srcset) if srcset else []
@@ -610,8 +741,28 @@ def _extract_photos(
                 PhotoMeta(
                     url=url,
                     width=width,
-                    alt=img.get("alt") or "",
+                    alt=_infer_photo_label(img, container),
                     srcset=[candidate[0] for candidate in normalized_candidates],
+                )
+            )
+
+        for role_img in container.select('[role="img"]'):
+            style_attr = role_img.get("style") or ""
+            match = _BACKGROUND_URL_PATTERN.search(style_attr)
+            if not match:
+                continue
+            bg_url = match.group(1)
+            if not bg_url or bg_url.startswith("data:"):
+                continue
+            if bg_url in seen_urls:
+                continue
+            seen_urls.add(bg_url)
+            photos.append(
+                PhotoMeta(
+                    url=bg_url,
+                    width=extract_im_width(bg_url),
+                    alt=_infer_photo_label(role_img, container),
+                    srcset=[bg_url],
                 )
             )
 
@@ -620,3 +771,23 @@ def _extract_photos(
         collect(overlay_soup)
 
     return photos
+
+
+def _detect_legacy_gallery(
+    soup: BeautifulSoup, overlay_soup: Optional[BeautifulSoup] = None
+) -> bool:
+    def has_legacy_markers(container: Optional[BeautifulSoup]) -> bool:
+        if not container:
+            return False
+        attr_names = ("aria-label", "alt", "title")
+        for attr in attr_names:
+            node = container.find(attrs={attr: _LEGACY_GALLERY_LABEL})
+            if node:
+                return True
+        for button in container.select("button"):
+            label = button.get_text(" ", strip=True)
+            if label and _LEGACY_GALLERY_LABEL.match(label):
+                return True
+        return False
+
+    return has_legacy_markers(overlay_soup) or has_legacy_markers(soup)

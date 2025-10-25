@@ -45,10 +45,12 @@ class PhotoStats(BaseModel):
     count: int
     coverage: List[str] = Field(default_factory=list)
     missing_coverage: List[str] = Field(default_factory=list)
-    key_spaces_covered: conint(ge=0) = 0
-    key_spaces_total: conint(gt=0) = 5
+    key_spaces_covered: Optional[int] = Field(default=None, ge=0)
+    key_spaces_total: Optional[int] = Field(default=None, ge=0)
     has_exterior_night: bool = False
     alt_text_ratio: Optional[confloat(ge=0.0, le=1.0)] = None
+    uses_legacy_gallery: bool = False
+    key_space_metrics_supported: bool = True
 
 
 class TrustSignals(BaseModel):
@@ -120,6 +122,8 @@ class AssessmentResponse(BaseModel):
                     "key_spaces_total": 5,
                     "has_exterior_night": False,
                     "alt_text_ratio": 0.65,
+                    "uses_legacy_gallery": False,
+                    "key_space_metrics_supported": True,
                 },
                 "copy_stats": {
                     "word_count": 214,

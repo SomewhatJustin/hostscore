@@ -8,7 +8,7 @@ import httpx
 
 async def main(url: str) -> None:
     async with httpx.AsyncClient() as client:
-        resp = await client.post("http://127.0.0.1:8080/assess", json={"url": url})
+        resp = await client.post("http://127.0.0.1:8000/assess", json={"url": url})
         try:
             data = resp.json()
         except Exception:

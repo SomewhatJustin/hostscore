@@ -13,6 +13,18 @@ from .amenity_matcher import detect_amenity_mentions
 from .extract import ListingContent, PhotoMeta
 from .models import AmenityAudit, CopyStats, PhotoStats, SectionScores, TopFix, TrustSignals
 
+_IMPACT_PRIORITY = {"high": 0, "medium": 1, "low": 2}
+
+
+def sort_top_fixes(fixes: List[TopFix]) -> List[TopFix]:
+    """Order fixes by impact (high -> medium -> low)."""
+
+    def rank(fix: TopFix) -> int:
+        impact = getattr(fix.impact, "value", fix.impact)
+        return _IMPACT_PRIORITY.get(str(impact), len(_IMPACT_PRIORITY))
+
+    return sorted(fixes, key=rank)
+
 _COVERAGE_KEYWORDS = {
     "bedroom": {"bedroom", "primary bedroom", "guest room", "bunk", "bed"},
     "bath": {"bathroom", "shower", "bath", "tub"},
@@ -60,9 +72,34 @@ class HeuristicResult:
     recommendations: List[TopFix] = field(default_factory=list)
 
 
+_LEGACY_IMAGE_LABEL = re.compile(r"\b(?:listing\s+)?image\s*\d+(?:\s+of\s+\d+)?$", re.I)
+
+
+def _coerce_legacy_gallery_flag(photos: List[PhotoMeta], uses_legacy_gallery: bool) -> bool:
+    """Fallback detection for legacy galleries when HTML markers are missing."""
+    if uses_legacy_gallery:
+        return True
+    if not photos:
+        return False
+    generic_count = 0
+    for photo in photos:
+        alt = (photo.alt or "").strip()
+        if not alt:
+            generic_count += 1
+            continue
+        if _LEGACY_IMAGE_LABEL.search(alt):
+            generic_count += 1
+    return generic_count >= max(3, len(photos))
+
+
 def run_heuristics(content: ListingContent) -> HeuristicResult:
     """Compute deterministic metrics for a listing."""
-    photo_stats, photo_score, photo_recos = _score_photos(content.photos)
+    uses_legacy_gallery = _coerce_legacy_gallery_flag(
+        content.photos, content.uses_legacy_gallery
+    )
+    photo_stats, photo_score, photo_recos = _score_photos(
+        content.photos, uses_legacy_gallery
+    )
     copy_stats, copy_score, copy_recos = _score_copy(content)
     amenities_audit, amenity_score, amenity_recos = _score_amenities(content)
     trust_stats, trust_score, trust_recos = _score_trust(content)
@@ -74,7 +111,8 @@ def run_heuristics(content: ListingContent) -> HeuristicResult:
         trust_signals=trust_score,
     )
     overall = int(round(mean(section_scores.model_dump().values())))
-    top_recos = (photo_recos + copy_recos + amenity_recos + trust_recos)[:5]
+    combined_recos = photo_recos + copy_recos + amenity_recos + trust_recos
+    top_recos = sort_top_fixes(combined_recos)[:5]
 
     return HeuristicResult(
         overall=overall,
@@ -87,21 +125,23 @@ def run_heuristics(content: ListingContent) -> HeuristicResult:
     )
 
 
-def _score_photos(photos: List[PhotoMeta]):
+def _score_photos(photos: List[PhotoMeta], uses_legacy_gallery: bool = False):
     count = len(photos)
     unique_urls = {photo.url for photo in photos if photo.url}
     near_duplicate_ratio = (
         (count - len(unique_urls)) / count if count and len(unique_urls) else None
     )
-    coverage = _infer_coverage(photos)
+    coverage = _infer_coverage(photos) if not uses_legacy_gallery else set()
     essential_keys = {"bedroom", "bath", "kitchen", "living", "exterior_day"}
-    essential_coverage = coverage & essential_keys
-    missing_coverage = essential_keys - essential_coverage
-    alt_text_ratio = (
-        sum(1 for photo in photos if (photo.alt or "").strip()) / count
-        if count
-        else None
-    )
+    essential_coverage = coverage & essential_keys if not uses_legacy_gallery else set()
+    missing_coverage = essential_keys - essential_coverage if not uses_legacy_gallery else set()
+    alt_count = sum(1 for photo in photos if (photo.alt or "").strip())
+    if not count:
+        alt_text_ratio = None
+    elif uses_legacy_gallery:
+        alt_text_ratio = 0.0
+    else:
+        alt_text_ratio = alt_count / count
 
     score = 100
     recommendations: List[TopFix] = []
@@ -148,14 +188,30 @@ def _score_photos(photos: List[PhotoMeta]):
         )
 
     score = max(0, min(100, score))
+
+    key_spaces_supported = not uses_legacy_gallery
+
+    if uses_legacy_gallery:
+        recommendations.append(
+            TopFix(
+                impact="low",
+                reason="Gallery uses Airbnb's legacy layout",
+                how_to_fix=(
+                    "Switch to Airbnb's newer room-by-room gallery so guests can explore each space in the guided tour."
+                ),
+            )
+        )
+
     stats = PhotoStats(
         count=count,
         coverage=sorted(coverage),
         missing_coverage=sorted(missing_coverage),
-        key_spaces_covered=len(essential_coverage),
-        key_spaces_total=len(essential_keys),
+        key_spaces_covered=len(essential_coverage) if key_spaces_supported else 0,
+        key_spaces_total=len(essential_keys) if key_spaces_supported else 0,
         has_exterior_night="exterior_night" in coverage,
         alt_text_ratio=round(alt_text_ratio, 3) if alt_text_ratio is not None else None,
+        uses_legacy_gallery=uses_legacy_gallery,
+        key_space_metrics_supported=key_spaces_supported,
     )
     return stats, score, recommendations
 

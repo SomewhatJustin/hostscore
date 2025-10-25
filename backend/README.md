@@ -29,13 +29,13 @@ playwright install chromium
 ## Run locally
 
 ```bash
-uvicorn api.main:app --reload --port 8080
+uvicorn api.main:app --reload --port 8000
 ```
 
 Submit an assessment:
 
 ```bash
-curl -X POST http://localhost:8080/assess \
+curl -X POST http://localhost:8000/assess \
   -H "Content-Type: application/json" \
   -d '{"url":"https://www.airbnb.com/rooms/123456"}'
 ```
@@ -46,5 +46,5 @@ Build and run locally:
 
 ```bash
 docker build -t airbnb-assessor-backend -f backend/Dockerfile backend
-docker run --rm -p 8080:8080 -e HAIKU_API_KEY=... airbnb-assessor-backend
+docker run --rm -p 8000:8000 -e HAIKU_API_KEY=... airbnb-assessor-backend
 ```

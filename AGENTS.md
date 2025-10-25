@@ -10,7 +10,7 @@
 ## Build, Test, and Development Commands
 - `python -m venv .venv && source .venv/bin/activate && pip install -r backend/requirements.txt`: create an isolated backend environment.
 - `playwright install chromium`: install the browser runtime required for `render_listing`.
-- `uvicorn backend.api.main:app --reload --port 8080`: serve the API locally with live reload.
+- `uvicorn backend.api.main:app --reload --port 8000`: serve the API locally with live reload.
 - `python backend/scripts/assess.py https://www.airbnb.com/rooms/...`: run assessments from the CLI for quick smoke checks.
 - `cd frontend && npm install && npm run dev -- --open`: bootstrap and iterate on the SvelteKit app once UI work begins.
 

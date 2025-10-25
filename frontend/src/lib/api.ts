@@ -28,6 +28,8 @@ interface RawPhotoStats {
   key_spaces_total?: number | null;
   has_exterior_night?: boolean | null;
   alt_text_ratio?: number | null;
+  uses_legacy_gallery?: boolean | null;
+  key_space_metrics_supported?: boolean | null;
 }
 
 interface RawCopyStats {
@@ -84,7 +86,9 @@ const mapPhotoStats = (stats: RawPhotoStats): PhotoStats => ({
   keySpacesCovered: stats.key_spaces_covered ?? 0,
   keySpacesTotal: stats.key_spaces_total ?? 5,
   hasExteriorNight: Boolean(stats.has_exterior_night),
-  altTextRatio: typeof stats.alt_text_ratio === 'number' ? stats.alt_text_ratio : null
+  altTextRatio: typeof stats.alt_text_ratio === 'number' ? stats.alt_text_ratio : null,
+  usesLegacyGallery: Boolean(stats.uses_legacy_gallery),
+  keySpaceMetricsSupported: stats.key_space_metrics_supported ?? true
 });
 
 const mapCopyStats = (stats: RawCopyStats): CopyStats => ({

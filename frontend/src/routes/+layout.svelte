@@ -1,28 +1,12 @@
 <script lang="ts">
-  import { page } from '$app/state';
-
   let { children } = $props();
 
-  const links = [{ href: '/', label: 'Assess' }];
   const currentYear = new Date().getFullYear();
 </script>
 
 <div class="app-shell">
   <header class="site-header">
     <a class="brand" href="/">HostScore</a>
-    <nav aria-label="Primary">
-      {#each links as link (link.href)}
-        {#if link.external}
-          <a class:active={page.url.pathname === link.href} href={link.href} rel="noreferrer" target="_blank">
-            {link.label}
-          </a>
-        {:else}
-          <a class:active={page.url.pathname === link.href} href={link.href}>
-            {link.label}
-          </a>
-        {/if}
-      {/each}
-    </nav>
   </header>
   <main class="site-main">
     {@render children()}
@@ -81,27 +65,6 @@
     font-size: 1.05rem;
   }
 
-  nav a {
-    color: #cbd5f5;
-    margin-left: 1rem;
-    text-decoration: none;
-    font-size: 0.95rem;
-    padding: 0.4rem 0.7rem;
-    border-radius: 999px;
-    transition: background-color 0.15s ease, color 0.15s ease;
-  }
-
-  nav a:hover,
-  nav a:focus-visible {
-    background-color: rgba(148, 163, 184, 0.18);
-    color: #fff;
-  }
-
-  nav a.active {
-    background-color: rgba(59, 130, 246, 0.28);
-    color: #fff;
-  }
-
   .site-main {
     padding: 2rem 1.5rem 3rem;
   }
@@ -111,11 +74,6 @@
       flex-direction: column;
       align-items: flex-start;
       gap: 0.75rem;
-    }
-
-    nav a {
-      margin-left: 0;
-      margin-right: 0.6rem;
     }
 
     .site-main {
