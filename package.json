@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "build": "npm --prefix frontend install && npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start"
+  },
   "dependencies": {
     "@sveltejs/mcp": "^0.1.8"
   }
