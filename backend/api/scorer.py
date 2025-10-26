@@ -51,7 +51,7 @@ class LLMSettings(BaseModel):
 
     api_key: str
     endpoint: str = "https://api.anthropic.com/v1/messages"
-    model: str = "haiku-4.5"
+    model: str = "claude-haiku-4-5"
     timeout_seconds: int = 10
     max_output_tokens: int = 512
 

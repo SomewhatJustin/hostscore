@@ -82,7 +82,7 @@ async def on_startup() -> None:
         if api_key:
             _llm_settings = LLMSettings(
                 api_key=api_key,
-                model=os.getenv("HAIKU_MODEL", "haiku-4.5"),
+                model=os.getenv("HAIKU_MODEL", "claude-haiku-4-5"),
                 timeout_seconds=int(os.getenv("HAIKU_TIMEOUT_SECONDS", "10")),
                 max_output_tokens=int(os.getenv("HAIKU_MAX_OUTPUT_TOKENS", "512")),
             )

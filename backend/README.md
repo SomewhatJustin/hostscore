@@ -11,12 +11,16 @@ pip install -r backend/requirements.txt
 playwright install chromium
 ```
 
+### Optional extras
+
+- `sentence-transformers` (plus its PyTorch dependency) enables embedding-based amenity matching. Skip it for faster Docker builds; install manually with `pip install sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu` if you need the additional recall.
+
 ## Environment
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `HAIKU_API_KEY` | Enables LLM refinement of top fixes | _disabled_ |
-| `HAIKU_MODEL` | Override Anthropic model id | `haiku-4.5` |
+| `HAIKU_MODEL` | Override Anthropic model id | `claude-haiku-4-5` |
 | `HAIKU_TIMEOUT_SECONDS` | LLM request timeout | `10` |
 | `HAIKU_MAX_OUTPUT_TOKENS` | LLM output token cap | `512` |
 | `CACHE_TTL_SECONDS` | Cache TTL for assessments | `900` |
