@@ -5,7 +5,16 @@ from __future__ import annotations
 from enum import Enum
 from typing import Dict, List, Optional
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, HttpUrl, conint, confloat
+from pydantic import (
+    AliasChoices,
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    conint,
+    confloat,
+)
 
 
 class ImpactLevel(str, Enum):
@@ -31,10 +40,14 @@ class AssessmentRequest(BaseModel):
 class SectionScores(BaseModel):
     """Individual section scores."""
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(populate_by_name=True, protected_namespaces=())
 
     photos: conint(ge=0, le=100)
-    copy: conint(ge=0, le=100)
+    copy_score: conint(ge=0, le=100) = Field(
+        ...,
+        validation_alias=AliasChoices("copy", "copy_score"),
+        serialization_alias="copy",
+    )
     amenities_clarity: conint(ge=0, le=100)
     trust_signals: conint(ge=0, le=100)
 

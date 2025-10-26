@@ -106,7 +106,7 @@ def run_heuristics(content: ListingContent) -> HeuristicResult:
 
     section_scores = SectionScores(
         photos=photo_score,
-        copy=copy_score,
+        copy_score=copy_score,
         amenities_clarity=amenity_score,
         trust_signals=trust_score,
     )

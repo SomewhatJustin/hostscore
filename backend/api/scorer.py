@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import json
 import textwrap
 from typing import Optional
@@ -54,6 +55,9 @@ class LLMSettings(BaseModel):
     model: str = "claude-haiku-4-5"
     timeout_seconds: int = 10
     max_output_tokens: int = 512
+
+
+logger = logging.getLogger(__name__)
 
 
 async def refine_assessment(
@@ -115,6 +119,7 @@ async def refine_assessment(
     }
 
     http_client = client or AsyncClient(timeout=settings.timeout_seconds)
+    data = None
     try:
         async for attempt in AsyncRetrying(
             reraise=True,
@@ -130,9 +135,21 @@ async def refine_assessment(
                 )
                 response.raise_for_status()
                 data = response.json()
+    except HTTPStatusError as exc:
+        logger.warning(
+            "LLM refinement failed with status %s; returning heuristic output.",
+            exc.response.status_code if exc.response else "unknown",
+        )
+        return heuristics
+    except Exception as exc:
+        logger.exception("LLM refinement error; returning heuristic output.")
+        return heuristics
     finally:
         if client is None:
             await http_client.aclose()
+
+    if not data:
+        return heuristics
 
     top_fixes: list[TopFix] = sort_top_fixes(heuristics.top_fixes.copy())
     overall = heuristics.overall
