@@ -14,6 +14,7 @@ playwright install chromium
 ### Optional extras
 
 - `sentence-transformers` (plus its PyTorch dependency) enables embedding-based amenity matching. Skip it for faster Docker builds; install manually with `pip install sentence-transformers --extra-index-url https://download.pytorch.org/whl/cpu` if you need the additional recall.
+- The Docker image pins Playwright to the 1.48 release line to match the bundled Chromium runtime. If you upgrade Playwright, also bump the base image tag in `backend/Dockerfile`.
 
 ## Environment
 

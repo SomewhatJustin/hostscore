@@ -1,6 +1,6 @@
 fastapi>=0.111
 uvicorn[standard]>=0.30
-playwright>=1.48
+playwright~=1.48.0
 beautifulsoup4>=4.12
 trafilatura>=1.6
 readability-lxml>=0.8
