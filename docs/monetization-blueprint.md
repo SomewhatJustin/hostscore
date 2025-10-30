@@ -11,7 +11,7 @@
   - Remaining fixes are blurred with copy that highlights the value of the paid report and teases the bonus section.
 - Upgrade prompts:
   - Sticky bottom drawer and button copy such as “Unlock 8 more fixes + bonus insights.”
-  - Clicking upgrade initiates login (if needed) and then Stripe Checkout.
+  - Clicking upgrade initiates login (if needed) and then Polar Checkout.
 - Post-upgrade UI:
   - Header shows authenticated user’s email, credits remaining (only if logged in), and two CTAs: “Free report” and “Paid report.”
   - Bonus section (text summary with next steps) is visible in the paid report response only.
@@ -23,12 +23,12 @@
   - On click, session cookie (HttpOnly, Secure) is issued and user redirected back to the page.
 - No dashboards or profile management; session data limited to identity and credit metadata.
 
-## Stripe Integration
-- One-time product priced at $10 for a single paid report credit.
-- Hosted Stripe Checkout handles payment; front end redirects logged-in users straight to Checkout.
-- Stripe webhook (verify signatures) processes `checkout.session.completed` events:
-  - Normalize customer email, upsert user record, increment credits, set `expires_at = now() + 30 days`.
-  - Record transaction row for audit and compliance.
+## Polar Integration
+- One-time product priced at $10 for a single paid report credit (product ID `abbcc3d2-2e04-45c2-ba02-42977a287c76` in sandbox).
+- Hosted Polar checkout handles payment; front end redirects logged-in users straight to Checkout.
+- Backend stores the checkout ID and metadata (user id/email) when creating the session and verifies completion via the Polar API once redirected back.
+- Success URL should point back to the assessment page (e.g. `https://app.hostscore.com/?checkout_id={CHECKOUT_ID}`) so the client can finalize the purchase and refresh credits inline.
+- After verification, normalize customer email, upsert the user record, increment credits, set `expires_at = now() + 30 days`, and log the payment.
 - Allow repeated purchases; each checkout adds one credit with its own 30-day expiration timestamp.
 
 ## Credits & Access Control
@@ -56,14 +56,13 @@
 - No rate limiting, analytics pipelines, or webhook event dashboards.
 - No team sharing or delegated credits.
 - No dashboards; surface status inline via header and report components.
-- Stripe is the sole payment provider; no Apple Pay integration beyond Checkout defaults.
+- Polar is the sole payment provider; no additional wallets beyond what Polar supports out of the box.
 - Bonus section limited to text summary and next steps; richer visualizations can come later.
 
 ## Next Implementation Steps
 1. Model tables and migrations for users, credits, reports.
 2. Implement magic-link endpoints (issue, consume) and Resend integration.
-3. Add Stripe Checkout session creation endpoint and webhook handler.
+3. Add Polar checkout session creation endpoint and post-checkout confirmation endpoint.
 4. Gate paid report API path behind credit check and integrate cache tagging.
 5. Update frontend: free vs paid flows, upgrade drawer, credit-aware header, static “Not Enough Credits” page.
 6. Document operational runbooks and webhook secrets in `MASTERPLAN.md`.
-

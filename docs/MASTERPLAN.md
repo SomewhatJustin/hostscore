@@ -1,6 +1,6 @@
 Airbnb Listing Assessor — Masterplan (MVP)
 
-    Scope guard: No DB, no auth, ship today. Python backend (FastAPI + Playwright) on Railway. Frontend is SvelteKit (deploy to Vercel or Railway). One LLM call (Haiku 4.5). Deterministic heuristics first; model refines and writes fixes. If you drift from this, that’s on you. 😈
+    Scope guard: Heuristics-first experience still drives the product slice. Monetization layer now active: SQLite persistence, magic-link auth, Polar-hosted checkout credits. Backend remains FastAPI + Playwright; frontend is SvelteKit. One LLM call (Haiku 4.5). Deterministic heuristics first; model refines and writes fixes. If you drift from this, that’s on you. 😈
 
 0) Product Slice (what “done” means today)
 
@@ -36,7 +36,9 @@ Airbnb Listing Assessor — Masterplan (MVP)
 
         Frontend: Vercel or Railway (Vercel recommended for instant previews)
 
-    State: None (no DB). In-memory LRU+TTL cache inside the backend process.
+    State: SQLite (users, credits, reports, login tokens). In-memory LRU+TTL cache still fronts report payloads per user/context.
+    Auth: Magic-link via Resend (single-use JWT, signed session cookies).
+    Payments: Polar checkout for one-off credits (server verifies checkout and issues credits).
 
     LLM: Haiku 4.5 (single JSON response call). Strict schema, short context, 3s–5s budget.
 
@@ -139,6 +141,37 @@ GET /healthz
 (Optional) POST /assess/html
 
     Accepts raw HTML if render fails (unblocks demos).
+
+4b) Monetization & Auth APIs
+
+    Sessions
+
+        POST /auth/magic-link
+            {"email": "host@example.com"} → 204
+            Issues single-use JWT, stored (hashed nonce) in sqlite, emails magic link via Resend.
+
+        GET /auth/callback?token=...
+            Consumes token, mints signed session cookie (ItsDangerous), redirects to POST_LOGIN_REDIRECT_URL.
+
+        POST /auth/logout
+            Clears session cookie.
+
+        GET /auth/session
+            → {"authenticated": bool, "email": str | null, "credits": {"available": int, "next_expiration": iso | null}}
+
+    Credits & checkout
+
+        POST /checkout/session
+            Body optional success_url/cancel_url overrides. Requires session. Creates Polar checkout session for the configured product; returns {checkout_id, checkout_url, environment}. When the frontend runs in dev mode it passes environment="sandbox" so the backend uses POLAR_ACCESS_TOKEN_SANDBOX / POLAR_PRODUCT_ID_SANDBOX if configured.
+
+        POST /checkout/confirm
+            Requires session. Fetches checkout from Polar, ensures status "succeeded", increments credit (30 day expiry), records payment, refreshes session state.
+
+    Assessments
+
+        POST /assess now accepts {url, report_type: "free" | "paid", force}
+            Response → {report: AssessmentResponse, meta: {report_type, is_paid, hidden_fix_count, credit_id?, credits_remaining?, next_credit_expiration?}}
+            Free reports return first two fixes; paid responses include bonus_summary plus the Sonnet-powered owner_overview.
 
 5) Heuristics (deterministic)
 Photos
@@ -402,13 +435,13 @@ Deploy backend (Railway) + frontend (Vercel)
 
     Generate one full assessment per listing request, but only return the “teaser” payload (overall score + single fix + minimal stats) to unauthenticated users. Return a `report_id` and cache the full JSON in the existing in-memory store.
 
-    Add `POST /checkout` that creates a Stripe Checkout Session for a fixed $10 price. Encode `report_id` (and normalized URL) in session metadata; set success to `/report?report_id=…&session_id={CHECKOUT_SESSION_ID}` and cancel to the teaser view.
+    Add `POST /checkout` that creates a Polar checkout session for a fixed $10 price. Encode `report_id` (and normalized URL) in metadata; set success to `/report?report_id=…&checkout_id={CHECKOUT_ID}` and cancel to the teaser view.
 
     Add `GET /assess/full` that accepts `report_id` and `session_id`, retrieves the Checkout Session, verifies `payment_status == "paid"` and matching metadata, then responds with the cached full report (regenerating if evicted). Return 402 if unpaid.
 
-    Frontend: show the teaser report with an “Unlock full report” button → call `/checkout`, redirect to Stripe, then on return exchange `report_id` + `session_id` for the full dataset and hydrate the UI.
+    Frontend: show the teaser report with an “Unlock full report” button → call `/checkout`, redirect to Polar, then on return exchange `report_id` + `checkout_id` for the full dataset and hydrate the UI.
 
-    Env: document `STRIPE_SECRET_KEY` (`STRIPE_PRICE_ID` optional) and Stripe test card workflow alongside deployment notes.
+    Env: document `POLAR_ACCESS_TOKEN`/`POLAR_PRODUCT_ID` (and sandbox variants) plus success URL requirements alongside deployment notes.
 
 16) Future Backlog
 
@@ -418,7 +451,7 @@ Deploy backend (Railway) + frontend (Vercel)
 
     Basic comps crawler by neighborhood
 
-    Stripe + rate-limits + saved reports
+    Polar + rate-limits + saved reports
 
     Redis (when you horizontally scale)
 

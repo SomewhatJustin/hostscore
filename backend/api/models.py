@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
 
 from pydantic import (
     AliasChoices,
     AnyHttpUrl,
     BaseModel,
     ConfigDict,
+    EmailStr,
     Field,
     HttpUrl,
     conint,
@@ -25,10 +27,21 @@ class ImpactLevel(str, Enum):
     low = "low"
 
 
+class ReportType(str, Enum):
+    """Available report variants."""
+
+    free = "free"
+    paid = "paid"
+
+
 class AssessmentRequest(BaseModel):
     """Incoming payload for assessing an Airbnb listing."""
 
     url: AnyHttpUrl = Field(..., description="Public Airbnb listing URL.")
+    report_type: ReportType = Field(
+        default=ReportType.free,
+        description="Type of report to generate: free teaser or full paid report.",
+    )
     force: bool = Field(
         default=False,
         description=(
@@ -116,6 +129,8 @@ class AssessmentResponse(BaseModel):
     amenities: AmenityAudit
     trust_signals: TrustSignals
     top_fixes: List[TopFix] = Field(default_factory=list)
+    bonus_summary: Optional[str] = None
+    owner_overview: Optional[str] = None
 
     model_config = {
         "json_schema_extra": {
@@ -171,6 +186,76 @@ class AssessmentResponse(BaseModel):
                         ),
                     }
                 ],
+                "bonus_summary": "Highlight your review snippets and refresh the gallery to unlock more bookings.",
+                "owner_overview": "Your city loft already shines with responsive hosting and strong amenities. Double down on the living area story and weave in nearby highlights to convert more skimmers.",
             }
         }
     }
+
+
+class CreditSummary(BaseModel):
+    """Aggregate credit information for the authenticated user."""
+
+    available: int = Field(0, description="How many report credits remain.")
+    next_expiration: Optional[datetime] = Field(
+        default=None,
+        description="Soonest expiration timestamp for the next credit.",
+    )
+
+
+class ReportMeta(BaseModel):
+    """Metadata returned alongside a report payload."""
+
+    report_type: ReportType
+    is_paid: bool = False
+    credit_id: Optional[str] = None
+    hidden_fix_count: conint(ge=0) = 0
+    credits_remaining: Optional[int] = None
+    next_credit_expiration: Optional[datetime] = None
+
+
+class ReportEnvelope(BaseModel):
+    """API response containing the selected report and metadata."""
+
+    report: AssessmentResponse
+    meta: ReportMeta
+
+
+class MagicLinkRequest(BaseModel):
+    """User request to receive a magic link email."""
+
+    email: EmailStr
+
+
+class SessionResponse(BaseModel):
+    """Session state for the current visitor."""
+
+    authenticated: bool = False
+    email: Optional[EmailStr] = None
+    credits: Optional[CreditSummary] = None
+
+
+class CheckoutSessionRequest(BaseModel):
+    """Payload for creating a Stripe checkout session."""
+
+    success_url: Optional[HttpUrl] = None
+    cancel_url: Optional[HttpUrl] = None
+    environment: Optional[Literal["live", "test"]] = Field(
+        default=None,
+        description="Stripe environment to use when creating the checkout session.",
+    )
+
+
+class CheckoutSessionResponse(BaseModel):
+    """Response generated when creating a checkout session."""
+
+    checkout_id: str
+    checkout_url: HttpUrl
+    environment: Literal["live", "sandbox"] = "live"
+
+
+class CheckoutConfirmRequest(BaseModel):
+    """Payload for confirming a checkout and issuing credits."""
+
+    checkout_id: str
+    environment: Optional[Literal["live", "sandbox"]] = None

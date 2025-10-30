@@ -1,13 +1,16 @@
 <script lang="ts">
-  import type { Assessment } from '$lib/types';
+  import { createEventDispatcher } from 'svelte';
+  import type { Assessment, ReportMeta, TopFix } from '$lib/types';
 
   interface Props {
     assessment: Assessment;
+    meta: ReportMeta;
     sourceUrl: string;
     assessedAt: Date;
   }
 
-  let { assessment, sourceUrl, assessedAt }: Props = $props();
+  let { assessment, meta, sourceUrl, assessedAt }: Props = $props();
+  const dispatch = createEventDispatcher<{ 'show-upgrade': void }>();
 
   const sectionSummaries = $derived([
     { key: 'photos', label: 'Photos', score: assessment.sectionScores.photos },
@@ -36,6 +39,46 @@
     medium: 'Medium impact',
     low: 'Low impact'
   } as const;
+
+  type FixSlot = { number: number; locked: true } | { number: number; locked: false; fix: TopFix };
+
+  const reportBadgeLabel = $derived(meta.isPaid ? 'Paid report' : 'Free preview');
+  const showBonusSummary = $derived(Boolean(meta.isPaid && assessment.bonusSummary));
+  const showOwnerOverview = $derived(Boolean(meta.isPaid && assessment.ownerOverview));
+  const topFixesLimited = $derived.by(() => assessment.topFixes.slice(0, 5));
+  const hiddenFixCount = $derived.by(() => {
+    if (meta.isPaid) return 0;
+    return Math.min(meta.hiddenFixCount ?? 0, 3);
+  });
+  const fixSlots = $derived.by<FixSlot[]>(() => {
+    const slots: FixSlot[] = [];
+    const limitedFixes = topFixesLimited;
+
+    if (meta.isPaid) {
+      limitedFixes.forEach((fix, idx) => {
+        slots.push({ number: idx + 1, locked: false, fix });
+      });
+      return slots;
+    }
+
+    const totalSlots = Math.min(5, hiddenFixCount + limitedFixes.length);
+    for (let i = 0; i < totalSlots; i += 1) {
+      if (i < hiddenFixCount) {
+        slots.push({ number: i + 1, locked: true });
+      } else {
+        const fix = limitedFixes[i - hiddenFixCount];
+        if (!fix) continue;
+        slots.push({ number: i + 1, locked: false, fix });
+      }
+    }
+
+    return slots;
+  });
+  const hasLockedFixes = $derived(fixSlots.some((slot) => slot.locked));
+
+  const requestUpgrade = () => {
+    dispatch('show-upgrade');
+  };
 
   const coverageLabels: Record<string, string> = {
     bedroom: 'Bedroom',
@@ -93,12 +136,37 @@
     <div>
       <p class="eyebrow">Assessment complete</p>
       <h2>Overall score: <span>{assessment.overall}%</span></h2>
+      <div class="report-badges">
+        <span class:paid={meta.isPaid} class="report-badge">{reportBadgeLabel}</span>
+        {#if meta.isPaid && meta.creditId}
+          <span class="report-badge secondary">Credit redeemed</span>
+        {/if}
+      </div>
     </div>
     <div class="meta">
       <a href={sourceUrl} rel="noreferrer" target="_blank">View listing ↗</a>
       <span aria-label="Assessed at">{assessedAtLabel}</span>
+      {#if !meta.isPaid}
+        <button type="button" class="header-upgrade" onclick={requestUpgrade}>
+          Buy full report
+        </button>
+      {/if}
     </div>
   </header>
+
+  {#if showOwnerOverview && assessment.ownerOverview}
+    <section class="overview">
+      <h3>Coach's overview</h3>
+      <p>{assessment.ownerOverview}</p>
+    </section>
+  {/if}
+
+  {#if showBonusSummary && assessment.bonusSummary}
+    <section class="bonus">
+      <h3>Bonus next steps</h3>
+      <p>{assessment.bonusSummary}</p>
+    </section>
+  {/if}
 
   <div class="score-grid">
     {#each sectionSummaries as section (section.key)}
@@ -295,18 +363,35 @@
       <p>Focus on the high-impact opportunities to raise booking conversion.</p>
     </header>
 
-    {#if assessment.topFixes.length === 0}
+    {#if fixSlots.length === 0}
       <p class="empty-state">No top fixes were suggested for this assessment.</p>
     {:else}
       <ol>
-        {#each assessment.topFixes as fix, index (index)}
-          <li>
-            <span class={`impact impact-${fix.impact}`}>{impactLabel[fix.impact]}</span>
-            <h4>{index + 1}. {fix.reason}</h4>
-            <p>{fix.howToFix}</p>
-          </li>
+        {#each fixSlots as slot (slot.number)}
+          {#if slot.locked}
+            <li class="locked">
+              <button type="button" class="locked-trigger" onclick={requestUpgrade}>
+                <span class="skeleton-pill" aria-hidden="true"></span>
+                <h4>{slot.number}. Unlock to reveal</h4>
+                <span class="skeleton-bar" aria-hidden="true"></span>
+                <span class="skeleton-bar short" aria-hidden="true"></span>
+                <span class="locked-caption">Upgrade for the full action plan.</span>
+              </button>
+            </li>
+          {:else if slot.fix}
+            <li>
+              <span class={`impact impact-${slot.fix.impact}`}>{impactLabel[slot.fix.impact]}</span>
+              <h4>{slot.number}. {slot.fix.reason}</h4>
+              <p>{slot.fix.howToFix}</p>
+            </li>
+          {/if}
         {/each}
       </ol>
+      {#if hasLockedFixes}
+        <div class="locked-actions">
+          <button type="button" class="locked-primary" onclick={requestUpgrade}>Unlock all fixes</button>
+        </div>
+      {/if}
     {/if}
   </section>
 </section>
@@ -346,11 +431,45 @@
     font-weight: 700;
   }
 
+  .report-badges {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .report-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.12);
+    color: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(15, 23, 42, 0.25);
+  }
+
+  .report-badge.paid {
+    background: rgba(15, 23, 42, 0.7);
+    color: rgba(248, 250, 252, 0.92);
+    border-color: rgba(248, 250, 252, 0.4);
+  }
+
+  .report-badge.secondary {
+    background: rgba(15, 118, 110, 0.18);
+    color: rgba(13, 148, 136, 0.9);
+    border-color: rgba(45, 212, 191, 0.25);
+  }
+
   .meta {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
     font-size: 0.95rem;
+    align-items: flex-end;
   }
 
   .meta a {
@@ -368,6 +487,26 @@
     background: rgba(248, 250, 252, 1);
   }
 
+  .header-upgrade {
+    border: none;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    color: rgba(15, 23, 42, 0.92);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.45rem 0.9rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .header-upgrade:hover,
+  .header-upgrade:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 35px -24px rgba(37, 99, 235, 0.85);
+  }
+
   .score-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -381,6 +520,43 @@
     padding: 1.2rem 1.4rem;
     display: grid;
     gap: 0.8rem;
+  }
+
+  .bonus {
+    background: rgba(22, 163, 74, 0.12);
+    border: 1px solid rgba(134, 239, 172, 0.4);
+    color: rgba(220, 252, 231, 0.92);
+    border-radius: 16px;
+    padding: 1.2rem 1.4rem;
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .bonus h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    letter-spacing: 0.01em;
+  }
+
+  .overview {
+    background: rgba(37, 99, 235, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: rgba(226, 232, 240, 0.95);
+    border-radius: 16px;
+    padding: 1.2rem 1.4rem;
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .overview h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    letter-spacing: 0.01em;
+  }
+
+  .overview p {
+    margin: 0;
+    line-height: 1.5;
   }
 
   .score-card h3 {
@@ -540,15 +716,71 @@
     gap: 0.4rem;
   }
 
+  .fixes li.locked {
+    background: rgba(15, 23, 42, 0.72);
+    border-style: dashed;
+    padding: 0;
+  }
+
   .fixes h4 {
     margin: 0;
     font-size: 1rem;
+  }
+
+  .fixes li.locked h4 {
+    color: rgba(148, 163, 184, 0.7);
   }
 
   .fixes p {
     margin: 0;
     color: rgba(203, 213, 225, 0.88);
     line-height: 1.55;
+  }
+
+  .locked-trigger {
+    border: none;
+    background: transparent;
+    color: inherit;
+    width: 100%;
+    padding: 1.1rem 1.3rem;
+    display: grid;
+    gap: 0.5rem;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 14px;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .locked-trigger:hover,
+  .locked-trigger:focus-visible {
+    background: rgba(37, 99, 235, 0.12);
+    transform: translateY(-1px);
+  }
+
+  .skeleton-pill {
+    width: 120px;
+    height: 0.85rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(71, 85, 105, 0.2), rgba(148, 163, 184, 0.35), rgba(71, 85, 105, 0.2));
+    animation: shimmer 1.6s linear infinite;
+    background-size: 200% 100%;
+  }
+
+  .skeleton-bar {
+    height: 0.9rem;
+    border-radius: 10px;
+    background: linear-gradient(90deg, rgba(71, 85, 105, 0.18), rgba(148, 163, 184, 0.28), rgba(71, 85, 105, 0.18));
+    animation: shimmer 1.6s linear infinite;
+    background-size: 200% 100%;
+  }
+
+  .skeleton-bar.short {
+    width: 75%;
+  }
+
+  .locked-caption {
+    font-size: 0.85rem;
+    color: rgba(191, 219, 254, 0.8);
   }
 
   .impact {
@@ -583,6 +815,29 @@
     color: rgba(203, 213, 225, 0.75);
   }
 
+  .locked-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .locked-primary {
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #16a34a, #22d3ee);
+    color: #0f172a;
+    font-weight: 600;
+    padding: 0.75rem 1.2rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .locked-primary:hover,
+  .locked-primary:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 35px -24px rgba(13, 148, 136, 0.85);
+  }
+
   @media (max-width: 900px) {
     .results__header {
       flex-direction: column;
@@ -591,6 +846,15 @@
 
     .meta {
       align-items: flex-start;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
     }
   }
 

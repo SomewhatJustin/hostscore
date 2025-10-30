@@ -8,7 +8,12 @@ import type {
   PhotoStats,
   SectionScores,
   TopFix,
-  TrustSignals
+  TrustSignals,
+  ReportEnvelope,
+  ReportMeta,
+  CreditSummary,
+  SessionInfo,
+  CheckoutSessionResult
 } from './types';
 
 const API_BASE = env.PUBLIC_API_BASE?.replace(/\/+$/, '') ?? '';
@@ -70,6 +75,22 @@ interface RawAssessmentResponse {
   amenities: RawAmenityAudit;
   trust_signals: RawTrustSignals;
   top_fixes?: RawTopFix[];
+  bonus_summary?: string | null;
+  owner_overview?: string | null;
+}
+
+interface RawReportMeta {
+  report_type: 'free' | 'paid';
+  is_paid: boolean;
+  credit_id?: string | null;
+  hidden_fix_count: number;
+  credits_remaining?: number | null;
+  next_credit_expiration?: string | null;
+}
+
+interface RawReportEnvelope {
+  report: RawAssessmentResponse;
+  meta: RawReportMeta;
 }
 
 const mapSectionScores = (scores: RawSectionScores): SectionScores => ({
@@ -129,7 +150,23 @@ const mapAssessment = (payload: RawAssessmentResponse): Assessment => ({
   copyStats: mapCopyStats(payload.copy_stats),
   trustSignals: mapTrustSignals(payload.trust_signals),
   amenities: mapAmenityAudit(payload.amenities),
-  topFixes: mapTopFixes(payload.top_fixes)
+  topFixes: mapTopFixes(payload.top_fixes),
+  bonusSummary: payload.bonus_summary ?? null,
+  ownerOverview: payload.owner_overview ?? null
+});
+
+const mapReportMeta = (meta: RawReportMeta): ReportMeta => ({
+  reportType: meta.report_type,
+  isPaid: meta.is_paid,
+  creditId: meta.credit_id ?? null,
+  hiddenFixCount: meta.hidden_fix_count,
+  creditsRemaining: meta.credits_remaining ?? null,
+  nextCreditExpiration: meta.next_credit_expiration ?? null
+});
+
+const mapCreditSummary = (payload?: { available?: number | null; next_expiration?: string | null }): CreditSummary => ({
+  available: payload?.available ?? 0,
+  nextExpiration: payload?.next_expiration ?? null
 });
 
 const withBase = (path: string): string => {
@@ -147,14 +184,21 @@ const withBase = (path: string): string => {
 export const assessListing = async (
   payload: AssessmentPayload,
   signal?: AbortSignal
-): Promise<Assessment> => {
+): Promise<ReportEnvelope> => {
+  const apiBody = {
+    url: payload.url,
+    report_type: payload.reportType,
+    force: payload.force ?? false
+  };
+
   const response = await fetch(withBase('/assess'), {
     method: 'POST',
     headers: {
       'content-type': 'application/json'
     },
-    body: JSON.stringify(payload),
-    signal
+    body: JSON.stringify(apiBody),
+    signal,
+    credentials: 'include'
   });
 
   if (!response.ok) {
@@ -177,6 +221,104 @@ export const assessListing = async (
     throw error;
   }
 
-  const data: RawAssessmentResponse = await response.json();
-  return mapAssessment(data);
+  const data: RawReportEnvelope = await response.json();
+  return {
+    report: mapAssessment(data.report),
+    meta: mapReportMeta(data.meta)
+  };
+};
+
+export const fetchSession = async (fetchFn: typeof fetch = fetch): Promise<SessionInfo> => {
+  const response = await fetchFn(withBase('/auth/session'), {
+    method: 'GET',
+    credentials: 'include'
+  });
+
+  if (!response.ok) {
+    return { authenticated: false };
+  }
+
+  const data = await response.json();
+  return {
+    authenticated: Boolean(data?.authenticated),
+    email: data?.email ?? null,
+    credits: data?.credits ? mapCreditSummary(data.credits) : undefined
+  };
+};
+
+export const requestMagicLink = async (email: string): Promise<void> => {
+  const response = await fetch(withBase('/auth/magic-link'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? 'Unable to send magic link.');
+  }
+};
+
+export const logout = async (): Promise<void> => {
+  await fetch(withBase('/auth/logout'), {
+    method: 'POST',
+    credentials: 'include'
+  });
+};
+
+export const createCheckoutSession = async (
+  successUrl?: string,
+  cancelUrl?: string
+): Promise<CheckoutSessionResult> => {
+  const body: Record<string, unknown> = {
+    success_url: successUrl,
+    cancel_url: cancelUrl
+  };
+
+  if (import.meta.env.DEV) {
+    body.environment = 'sandbox';
+  }
+
+  const response = await fetch(withBase('/checkout/session'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? 'Unable to start checkout.');
+  }
+
+  const data = await response.json();
+  return {
+    checkoutId: data.checkout_id,
+    checkoutUrl: data.checkout_url,
+    environment: data.environment ?? 'live'
+  };
+};
+
+export const confirmCheckout = async (
+  checkoutId: string,
+  environment?: 'live' | 'sandbox'
+): Promise<SessionInfo> => {
+  const response = await fetch(withBase('/checkout/confirm'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ checkout_id: checkoutId, environment })
+  });
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? 'Unable to finalize checkout.');
+  }
+
+  const data = await response.json();
+  return {
+    authenticated: Boolean(data?.authenticated),
+    email: data?.email ?? null,
+    credits: data?.credits ? mapCreditSummary(data.credits) : undefined
+  };
 };

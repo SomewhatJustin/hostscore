@@ -1,4 +1,5 @@
 export type ImpactLevel = 'high' | 'medium' | 'low';
+export type ReportType = 'free' | 'paid';
 
 export interface SectionScores {
   photos: number;
@@ -57,14 +58,48 @@ export interface Assessment {
   trustSignals: TrustSignals;
   amenities: AmenityAudit;
   topFixes: TopFix[];
+  bonusSummary?: string | null;
+  ownerOverview?: string | null;
 }
 
 export interface AssessmentPayload {
   url: string;
+  reportType: ReportType;
   force?: boolean;
 }
 
 export interface AssessmentError {
   status: number;
   message: string;
+}
+
+export interface CreditSummary {
+  available: number;
+  nextExpiration?: string | null;
+}
+
+export interface ReportMeta {
+  reportType: ReportType;
+  isPaid: boolean;
+  creditId?: string | null;
+  hiddenFixCount: number;
+  creditsRemaining?: number | null;
+  nextCreditExpiration?: string | null;
+}
+
+export interface ReportEnvelope {
+  report: Assessment;
+  meta: ReportMeta;
+}
+
+export interface SessionInfo {
+  authenticated: boolean;
+  email?: string | null;
+  credits?: CreditSummary;
+}
+
+export interface CheckoutSessionResult {
+  checkoutId: string;
+  checkoutUrl: string;
+  environment?: 'live' | 'sandbox';
 }

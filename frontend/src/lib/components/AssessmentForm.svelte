@@ -8,7 +8,7 @@
 
   const dispatch = createEventDispatcher<{ submit: SubmitDetail }>();
 
-  let { initialUrl = '', loading = false } = $props<{ initialUrl?: string; loading?: boolean }>();
+  let { initialUrl = '', loading = false, mode = 'free' } = $props<{ initialUrl?: string; loading?: boolean; mode?: 'free' | 'paid' }>();
 
   let url = $state(initialUrl);
   let force = $state(false);
@@ -46,7 +46,7 @@
           <span class="spinner" aria-hidden="true"></span>
           Assessing…
         {:else}
-          Assess listing
+          {mode === 'paid' ? 'Run paid report' : 'Assess listing'}
         {/if}
       </button>
     </div>

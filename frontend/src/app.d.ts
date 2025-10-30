@@ -2,7 +2,9 @@
 declare global {
   namespace App {
     // interface Locals {}
-    // interface PageData {}
+    interface PageData {
+      session: import('$lib/types').SessionInfo;
+    }
     // interface PageState {}
     // interface Platform {}
   }

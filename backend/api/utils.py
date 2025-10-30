@@ -35,10 +35,22 @@ def normalize_listing_url(raw_url: str) -> str:
     return normalized
 
 
-def build_cache_key(url: str) -> str:
-    """Return a deterministic cache key for a listing URL."""
+def build_cache_key(
+    url: str,
+    *,
+    report_type: str,
+    user_id: str | None = None,
+    credit_id: str | None = None,
+) -> str:
+    """Return a deterministic cache key scoped to user/report context."""
+
     normalized = normalize_listing_url(url)
-    return normalized.lower()
+    parts = [normalized.lower(), report_type.lower()]
+    if user_id:
+        parts.append(user_id.lower())
+    if credit_id:
+        parts.append(credit_id.lower())
+    return "::".join(parts)
 
 
 def parse_srcset(srcset: str) -> List[Tuple[str, int]]:
